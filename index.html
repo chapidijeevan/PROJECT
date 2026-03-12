@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AUSHIVA - Smart Medicine Inventory</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --accent-color: #3498db;
+        }
+        body {
+            background-color: #f8f9fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .sidebar {
+            height: 100vh;
+            background: var(--primary-color);
+            color: white;
+            position: fixed;
+            width: 250px;
+        }
+        .main-content {
+            margin-left: 250px;
+            padding: 20px;
+        }
+        .nav-link {
+            color: rgba(255,255,255,0.8);
+            padding: 15px 20px;
+            border-radius: 0;
+        }
+        .nav-link:hover, .nav-link.active {
+            background: rgba(255,255,255,0.1);
+            color: white;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border-radius: 10px;
+        }
+        .stat-card {
+            transition: transform 0.2s;
+        }
+        .stat-card:hover {
+            transform: translateY(-5px);
+        }
+        .barcode-input-group {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        #barcodeInput {
+            font-size: 1.5rem;
+            text-align: center;
+            letter-spacing: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <!-- Sidebar -->
+        <div class="sidebar d-flex flex-column">
+            <div class="p-4 text-center">
+                <h3 class="fw-bold">AUSHIVA</h3>
+                <small class="text-white-50">Smart Inventory</small>
+            </div>
+            <nav class="nav flex-column mt-3">
+                <a class="nav-link active" href="#" onclick="showPage('dashboard')"><i class="bi bi-speedometer2 me-2"></i> Dashboard</a>
+                <a class="nav-link" href="#" onclick="showPage('scan')"><i class="bi bi-upc-scan me-2"></i> Scan Medicine</a>
+                <a class="nav-link" href="#" onclick="showPage('inventory')"><i class="bi bi-box-seam me-2"></i> Inventory</a>
+                <a class="nav-link" href="#" onclick="showPage('alerts')"><i class="bi bi-exclamation-triangle me-2"></i> Expiry Alerts</a>
+                <a class="nav-link" href="#" onclick="showPage('exchange')"><i class="bi bi-arrow-left-right me-2"></i> Hospital Exchange</a>
+            </nav>
+            <div class="mt-auto p-4">
+                <button class="btn btn-outline-light w-full" onclick="logout()">Logout</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Dashboard Page -->
+            <div id="dashboardPage" class="page">
+                <h2 class="mb-4">Dashboard Overview</h2>
+                <div class="row g-4 mb-4">
+                    <div class="col-md-3">
+                        <div class="card stat-card bg-primary text-white p-3">
+                            <h6>Total Medicines</h6>
+                            <h2 id="stat-total">0</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card bg-danger text-white p-3">
+                            <h6>Expired</h6>
+                            <h2 id="stat-expired">0</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card bg-warning text-dark p-3">
+                            <h6>Expiring Soon</h6>
+                            <h2 id="stat-expiring">0</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card stat-card bg-info text-white p-3">
+                            <h6>Low Stock</h6>
+                            <h2 id="stat-low">0</h2>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-md-8">
+                        <div class="card p-4 mb-4">
+                            <h5>Demand Prediction (Next Month)</h5>
+                            <canvas id="predictionChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card p-4 mb-4">
+                            <h5>Quick Actions</h5>
+                            <button class="btn btn-primary w-100 mb-2" onclick="showPage('scan')">Scan New Item</button>
+                            <button class="btn btn-outline-secondary w-100" onclick="refreshDashboard()">Refresh Data</button>
+                        </div>
+                        <div class="card p-4">
+                            <h5>Low Stock Alerts</h5>
+                            <div id="lowStockList" class="small"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scan Page -->
+            <div id="scanPage" class="page d-none">
+                <h2 class="mb-4">Scan Medicine</h2>
+                <div class="barcode-input-group mb-4">
+                    <label class="form-label text-muted">Ready to Scan (Hellett HT410 Integration)</label>
+                    <input type="text" id="barcodeInput" class="form-control" placeholder="Scan Barcode Now..." autofocus>
+                    <p class="mt-2 text-center text-muted"><small><i class="bi bi-keyboard"></i> Scanner acts as HID Keyboard. Focus this field and scan.</small></p>
+                </div>
+
+                <div id="medicineResult" class="card p-4 d-none">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h3 id="res-name">Medicine Name</h3>
+                            <p class="text-muted">Barcode: <span id="res-barcode"></span></p>
+                            <div class="badge bg-success mb-3" id="res-status">In Stock</div>
+                            <table class="table table-sm">
+                                <tr><td>Batch:</td><td id="res-batch">-</td></tr>
+                                <tr><td>Expiry:</td><td id="res-expiry">-</td></tr>
+                                <tr><td>Current Stock:</td><td id="res-qty">0</td></tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6 border-start">
+                            <h5>Update Stock</h5>
+                            <div class="input-group mb-3">
+                                <span class="input-group-text">Quantity</span>
+                                <input type="number" id="updateQty" class="form-control" value="1">
+                            </div>
+                            <button class="btn btn-success w-100 mb-2" onclick="updateStock('add')">Add to Stock</button>
+                            <button class="btn btn-warning w-100" onclick="updateStock('remove')">Mark as Used</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="newMedicineForm" class="card p-4 d-none">
+                    <h3>New Medicine Detected</h3>
+                    <p>This barcode is not in our system. Please register it.</p>
+                    <form id="addMedForm">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label">Name</label>
+                                <input type="text" name="name" class="form-control" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Barcode</label>
+                                <input type="text" id="form-barcode" name="barcode" class="form-control" readonly>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Batch Number</label>
+                                <input type="text" name="batch_number" class="form-control">
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Expiry Date</label>
+                                <input type="date" name="expiry_date" class="form-control" required>
+                            </div>
+                            <div class="col-md-12">
+                                <button type="submit" class="btn btn-primary">Register Medicine</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Inventory Page -->
+            <div id="inventoryPage" class="page d-none">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h2>Medicine Inventory</h2>
+                    <button class="btn btn-primary" onclick="showPage('scan')">Add New</button>
+                </div>
+                <div class="card p-3">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Barcode</th>
+                                <th>Batch</th>
+                                <th>Expiry</th>
+                                <th>Quantity</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="inventoryTable"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Alerts Page -->
+            <div id="alertsPage" class="page d-none">
+                <h2 class="mb-4">Expiry Monitoring</h2>
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card border-danger">
+                            <div class="card-header bg-danger text-white">Expired Medicines</div>
+                            <div class="card-body">
+                                <ul class="list-group list-group-flush" id="expiredList"></ul>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card border-warning">
+                            <div class="card-header bg-warning">Expiring Within 30 Days</div>
+                            <div class="card-body">
+                                <ul class="list-group list-group-flush" id="expiringSoonList"></ul>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exchange Page -->
+            <div id="exchangePage" class="page d-none">
+                <h2 class="mb-4">Multi-Hospital Medicine Exchange</h2>
+                <div class="alert alert-info">Hospitals can share excess stock to reduce wastage.</div>
+                <div class="card p-3">
+                    <h5>Available Excess Stock</h5>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Medicine</th>
+                                <th>Hospital</th>
+                                <th>Quantity</th>
+                                <th>Expiry</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="exchangeTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        let currentMedicine = null;
+
+        // Navigation
+        function showPage(pageId) {
+            document.querySelectorAll('.page').forEach(p => p.classList.add('d-none'));
+            document.getElementById(pageId + 'Page').classList.remove('d-none');
+            document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
+            event?.target?.classList?.add('active');
+
+            if (pageId === 'dashboard') refreshDashboard();
+            if (pageId === 'inventory') loadInventory();
+            if (pageId === 'alerts') loadAlerts();
+            if (pageId === 'exchange') loadExchange();
+            if (pageId === 'scan') document.getElementById('barcodeInput').focus();
+        }
+
+        // Barcode Scanning Logic (Hellett HT410 Integration)
+        const barcodeInput = document.getElementById('barcodeInput');
+        barcodeInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                const barcode = barcodeInput.value.trim();
+                if (barcode) {
+                    lookupBarcode(barcode);
+                    barcodeInput.value = '';
+                }
+            }
+        });
+
+        async function lookupBarcode(barcode) {
+            const res = await fetch(`/api/medicines/barcode/${barcode}`);
+            const resultDiv = document.getElementById('medicineResult');
+            const formDiv = document.getElementById('newMedicineForm');
+            
+            if (res.ok) {
+                const med = await res.json();
+                currentMedicine = med;
+                document.getElementById('res-name').innerText = med.name;
+                document.getElementById('res-barcode').innerText = med.barcode;
+                document.getElementById('res-batch').innerText = med.batch_number;
+                document.getElementById('res-expiry').innerText = med.expiry_date;
+                document.getElementById('res-qty').innerText = med.quantity;
+                
+                resultDiv.classList.remove('d-none');
+                formDiv.classList.add('d-none');
+            } else {
+                document.getElementById('form-barcode').value = barcode;
+                resultDiv.classList.add('d-none');
+                formDiv.classList.remove('d-none');
+            }
+        }
+
+        // API Calls
+        async function refreshDashboard() {
+            const res = await fetch('/api/dashboard/stats');
+            const stats = await res.json();
+            document.getElementById('stat-total').innerText = stats.totalMedicines;
+            document.getElementById('stat-expired').innerText = stats.expired;
+            document.getElementById('stat-expiring').innerText = stats.expiringSoon;
+            document.getElementById('stat-low').innerText = stats.lowStock;
+            
+            const medRes = await fetch('/api/medicines');
+            const meds = await medRes.json();
+            const lowMeds = meds.filter(m => m.quantity < 10);
+            document.getElementById('lowStockList').innerHTML = lowMeds.map(m => `
+                <div class="d-flex justify-content-between border-bottom py-1">
+                    <span>${m.name}</span>
+                    <span class="text-danger fw-bold">${m.quantity} left</span>
+                </div>
+            `).join('') || '<p class="text-muted">No low stock items</p>';
+
+            loadPredictionChart();
+        }
+
+        async function loadPredictionChart() {
+            const res = await fetch('/api/prediction');
+            const data = await res.json();
+            
+            const ctx = document.getElementById('predictionChart').getContext('2d');
+            if (window.myChart) window.myChart.destroy();
+            
+            window.myChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: data.map(d => d.name),
+                    datasets: [{
+                        label: 'Predicted Demand (Units)',
+                        data: data.map(d => d.predictedDemand),
+                        backgroundColor: '#3498db'
+                    }]
+                }
+            });
+        }
+
+        async function loadInventory() {
+            const res = await fetch('/api/medicines');
+            const meds = await res.json();
+            const table = document.getElementById('inventoryTable');
+            table.innerHTML = meds.map(m => `
+                <tr>
+                    <td>${m.name}</td>
+                    <td>${m.barcode}</td>
+                    <td>${m.batch_number}</td>
+                    <td>${m.expiry_date}</td>
+                    <td>${m.quantity}</td>
+                    <td><span class="badge ${m.quantity < 10 ? 'bg-danger' : 'bg-success'}">${m.quantity < 10 ? 'Low Stock' : 'OK'}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="markAsExcess(${m.id}, ${!m.is_excess})">
+                            ${m.is_excess ? 'Unmark Excess' : 'Mark Excess'}
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        async function updateStock(type) {
+            const qty = parseInt(document.getElementById('updateQty').value);
+            if (type === 'add') {
+                await fetch(`/api/medicines/${currentMedicine.id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ quantity: currentMedicine.quantity + qty, is_excess: currentMedicine.is_excess })
+                });
+            } else {
+                await fetch('/api/usage', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ medicine_id: currentMedicine.id, quantity_used: qty, department: 'General' })
+                });
+            }
+            lookupBarcode(currentMedicine.barcode);
+            alert('Stock updated successfully');
+        }
+
+        document.getElementById('addMedForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = Object.fromEntries(formData.entries());
+            data.quantity = 0;
+            
+            const res = await fetch('/api/medicines', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify(data)
+            });
+            
+            if (res.ok) {
+                alert('Medicine registered!');
+                lookupBarcode(data.barcode);
+            }
+        };
+
+        async function markAsExcess(id, val) {
+            await fetch(`/api/medicines/${id}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ is_excess: val })
+            });
+            loadInventory();
+        }
+
+        async function loadAlerts() {
+            const res = await fetch('/api/medicines');
+            const meds = await res.json();
+            const today = new Date();
+            const next30 = new Date();
+            next30.setDate(today.getDate() + 30);
+
+            const expired = meds.filter(m => new Date(m.expiry_date) < today);
+            const soon = meds.filter(m => {
+                const d = new Date(m.expiry_date);
+                return d >= today && d <= next30;
+            });
+
+            document.getElementById('expiredList').innerHTML = expired.map(m => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    ${m.name} (Batch: ${m.batch_number})
+                    <span class="badge bg-danger">Expired: ${m.expiry_date}</span>
+                </li>
+            `).join('') || '<li class="list-group-item">No expired medicines</li>';
+
+            document.getElementById('expiringSoonList').innerHTML = soon.map(m => `
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    ${m.name}
+                    <span class="badge bg-warning text-dark">Expires: ${m.expiry_date}</span>
+                </li>
+            `).join('') || '<li class="list-group-item">No medicines expiring soon</li>';
+        }
+
+        async function loadExchange() {
+            const res = await fetch('/api/sharing/excess');
+            const excess = await res.json();
+            document.getElementById('exchangeTable').innerHTML = excess.map(m => `
+                <tr>
+                    <td>${m.name}</td>
+                    <td>${m.hospital_name}</td>
+                    <td>${m.quantity}</td>
+                    <td>${m.expiry_date}</td>
+                    <td><button class="btn btn-sm btn-primary" onclick="alert('Request sent to ${m.hospital_name}')">Request</button></td>
+                </tr>
+            `).join('') || '<tr><td colspan="5" class="text-center">No excess stock available</td></tr>';
+        }
+
+        // Init
+        refreshDashboard();
+    </script>
+</body>
+</html>

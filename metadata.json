@@ -1,0 +1,5 @@
+{
+  "name": "AUSHIVA - Smart Medicine Inventory",
+  "description": "Hospital medicine inventory management with barcode scanning, expiry monitoring, and demand prediction.",
+  "requestFramePermissions": []
+}
