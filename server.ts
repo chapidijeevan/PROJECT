@@ -74,10 +74,87 @@ async function startServer() {
   if (hospitalCount.count === 0) {
     db.prepare("INSERT INTO hospitals (name, location) VALUES (?, ?)").run("City General Hospital", "Downtown");
     db.prepare("INSERT INTO hospitals (name, location) VALUES (?, ?)").run("St. Mary Medical Center", "Uptown");
+    db.prepare("INSERT INTO hospitals (name, location) VALUES (?, ?)").run("Apollo Health", "Westside");
     db.prepare("INSERT INTO users (username, password, role, hospital_id) VALUES (?, ?, ?, ?)").run("admin", "admin123", "ADMIN", 1);
+
+    // Add 20 sample medicines
+    const medicines = [
+      ["Paracetamol", "8901234567890", "B101", "GSK", 500, "2026-12-01", 1],
+      ["Amoxicillin", "8901234567891", "B102", "Pfizer", 200, "2025-05-15", 1],
+      ["Ibuprofen", "8901234567892", "B103", "Bayer", 150, "2026-08-20", 2],
+      ["Metformin", "8901234567893", "B104", "Merck", 300, "2027-01-10", 1],
+      ["Atorvastatin", "8901234567894", "B105", "Pfizer", 100, "2025-11-30", 3],
+      ["Amlodipine", "8901234567895", "B106", "Novartis", 250, "2026-03-15", 2],
+      ["Omeprazole", "8901234567896", "B107", "AstraZeneca", 400, "2026-06-25", 1],
+      ["Losartan", "8901234567897", "B108", "Merck", 180, "2025-09-12", 2],
+      ["Albuterol", "8901234567898", "B109", "GSK", 50, "2026-01-05", 3],
+      ["Gabapentin", "8901234567899", "B110", "Pfizer", 120, "2027-04-18", 1],
+      ["Sertraline", "8901234567900", "B111", "Viatris", 90, "2026-10-22", 2],
+      ["Levothyroxine", "8901234567901", "B112", "AbbVie", 350, "2027-02-14", 1],
+      ["Lisinopril", "8901234567902", "B113", "Lupin", 220, "2026-07-08", 3],
+      ["Hydrochlorothiazide", "8901234567903", "B114", "Sandoz", 140, "2025-12-25", 2],
+      ["Metoprolol", "8901234567904", "B115", "AstraZeneca", 160, "2026-05-30", 1],
+      ["Prednisone", "8901234567905", "B116", "Hikma", 80, "2025-04-10", 2],
+      ["Azithromycin", "8901234567906", "B117", "Pfizer", 60, "2025-08-15", 3],
+      ["Furosemide", "8901234567907", "B118", "Sanofi", 110, "2026-11-05", 1],
+      ["Pantoprazole", "8901234567908", "B119", "Takeda", 280, "2027-03-20", 2],
+      ["Warfarin", "8901234567909", "B120", "Bristol Myers", 70, "2026-09-15", 1]
+    ];
+
+    const insertMed = db.prepare(`
+      INSERT INTO medicines (name, barcode, batch_number, manufacturer, quantity, expiry_date, hospital_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    for (const med of medicines) {
+      insertMed.run(...med);
+    }
+
+    // Add some usage history
+    const usageHistory = [
+      [1, 20, "Emergency", "2026-01-10"],
+      [1, 15, "OPD", "2026-01-15"],
+      [2, 10, "Emergency", "2026-01-20"],
+      [3, 25, "Surgery", "2026-02-05"],
+      [4, 30, "OPD", "2026-02-12"],
+      [5, 5, "Emergency", "2026-02-18"],
+      [1, 40, "Emergency", "2026-03-01"],
+      [2, 20, "OPD", "2026-03-05"],
+      [6, 15, "Surgery", "2026-03-10"]
+    ];
+
+    const insertUsage = db.prepare(`
+      INSERT INTO usage_history (medicine_id, quantity_used, department, date_used)
+      VALUES (?, ?, ?, ?)
+    `);
+
+    for (const usage of usageHistory) {
+      insertUsage.run(...usage);
+    }
   }
 
   // API Routes
+  
+  // Analytics Endpoints
+  app.get("/api/analytics/usage-trends", (req, res) => {
+    const trends = db.prepare(`
+      SELECT strftime('%Y-%m', date_used) as month, SUM(quantity_used) as total
+      FROM usage_history
+      GROUP BY month
+      ORDER BY month ASC
+    `).all();
+    res.json(trends);
+  });
+
+  app.get("/api/analytics/stock-distribution", (req, res) => {
+    const distribution = db.prepare(`
+      SELECT h.name as hospital, SUM(m.quantity) as total_stock
+      FROM medicines m
+      JOIN hospitals h ON m.hospital_id = h.id
+      GROUP BY h.id
+    `).all();
+    res.json(distribution);
+  });
   
   // Dashboard Stats
   app.get("/api/dashboard/stats", (req, res) => {
@@ -115,6 +192,12 @@ async function startServer() {
   app.post("/api/medicines", (req, res) => {
     const { name, barcode, batch_number, manufacturer, quantity, expiry_date, hospital_id } = req.body;
     try {
+      // Check if already registered
+      const existing = db.prepare("SELECT * FROM medicines WHERE barcode = ?").get(barcode);
+      if (existing) {
+        return res.status(400).json({ error: "already registered" });
+      }
+
       const info = db.prepare(`
         INSERT INTO medicines (name, barcode, batch_number, manufacturer, quantity, expiry_date, hospital_id)
         VALUES (?, ?, ?, ?, ?, ?, ?)
